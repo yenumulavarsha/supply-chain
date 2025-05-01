@@ -1,7 +1,20 @@
-{ pkgs }: {
-  deps = [
-    pkgs.python311
-    pkgs.python311Packages.fastapi
-    pkgs.python311Packages.uvicorn
-  ];
+{ pkgs }:
+
+let
+  pythonEnv = pkgs.python311.withPackages (ps: with ps; [
+    fastapi
+    uvicorn
+    altair
+    pandas
+    numpy
+    plotly
+    pydantic
+    python-dotenv
+    requests
+    seaborn
+    streamlit
+    pip
+  ]);
+in {
+  deps = [ pythonEnv ];
 }
