@@ -114,7 +114,7 @@ with st.sidebar:
             st.session_state["question"] = question
 
 # Main content area divided into tabs
-tab1, tab4, tab2, tab3 = st.tabs(["🔍 Query Analysis", " Cost analyzer", "📊 Data Visualization", "📈 Performance Metrics"])
+tab1, tab4, tab2, tab3, tab5 = st.tabs(["🔍 Query Analysis", " Cost analyzer", "📊 Data Visualization", "📈 Performance Metrics", "🗺️ Geospatial Heatmap"])
 
 with tab1:
     # Input field for the question
@@ -938,3 +938,43 @@ if st.session_state.get("show_product_data", False):
             st.dataframe(product_data.T, use_container_width=True)
         else:
             st.warning(f"No data available for {selected_product}")
+
+with tab5:
+    st.markdown("## 🗺️ Geospatial Spoilage Heatmap")
+
+    # Sample data
+    data = {
+        "Location": ["Warehouse A", "Warehouse B", "Cold Storage X", "Retail Hub Y"],
+        "Latitude": [12.9716, 13.0827, 19.0760, 28.7041],
+        "Longitude": [77.5946, 80.2707, 72.8777, 77.1025],
+        "Avg_Spoilage (%)": [24.5, 30.2, 18.6, 15.2],
+        "Type": ["Warehouse", "Warehouse", "Cold Storage", "Retail Hub"]
+    }
+
+    geo_df = pd.DataFrame(data)
+
+    selected_type = st.sidebar.selectbox("Filter by Facility Type", ["All"] + geo_df["Type"].unique().tolist())
+    if selected_type != "All":
+        geo_df = geo_df[geo_df["Type"] == selected_type]
+
+    fig = px.scatter_mapbox(
+        geo_df,
+        lat="Latitude",
+        lon="Longitude",
+        size="Avg_Spoilage (%)",
+        color="Avg_Spoilage (%)",
+        hover_name="Location",
+        hover_data=["Type", "Avg_Spoilage (%)"],
+        zoom=4,
+        height=600,
+        size_max=30,
+        color_continuous_scale="Reds"
+    )
+
+    fig.update_layout(
+        mapbox_style="carto-positron",
+        margin={"r": 0, "t": 0, "l": 0, "b": 0}
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+            
