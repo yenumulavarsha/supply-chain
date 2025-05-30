@@ -7,6 +7,11 @@ import altair as alt
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+from prophet import Prophet
+import plotly.express as px
+from scipy.stats import zscore
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Set page configuration
 st.set_page_config(
@@ -114,7 +119,7 @@ with st.sidebar:
             st.session_state["question"] = question
 
 # Main content area divided into tabs
-tab1, tab4, tab2, tab3, tab5 = st.tabs(["🔍 Query Analysis", " Cost analyzer", "📊 Data Visualization", "📈 Performance Metrics", "🗺️ Geospatial Heatmap"])
+tab1, tab4, tab2, tab3, tab5, tab6 = st.tabs(["🔍 Query Analysis", " Cost analyzer", "📊 Data Visualization", "📈 Performance Metrics", "🗺️ Geospatial Heatmap", "🧠 Advanced Analytics"])
 
 with tab1:
     # Input field for the question
@@ -317,9 +322,6 @@ with tab4:
                 st.warning("Make sure your FastAPI server is running and accessible.")
 
 with tab2:
-    st.markdown("## 📊 Visualization Dashboard")
-    st.write("Explore insights through interactive visualizations of key metrics")
-    
     # Sample sensor data for visualization
     # In a real app, you'd fetch this from your API or database
     @st.cache_data
@@ -340,7 +342,41 @@ with tab2:
         return pd.DataFrame(data)
     
     sensor_df = load_sensor_data()
-    
+    st.markdown("## 📊 Visualization Dashboard")  
+    st.write("Explore insights through interactive visualizations of key metrics")
+    sensor_df = load_sensor_data()
+    st.markdown("### 🔮 Forecasting: Select a Metric to Predict")
+
+    #Let user pick a metric
+    forecast_metric = st.selectbox(
+        "Choose a metric to forecast:",
+        ["Power_Consumption_kWh", "Temperature_C", "Operating_Cost_USD"]
+    )
+
+    #Prepare data
+    df_forecast = sensor_df[["Timestamp", forecast_metric]].copy()
+    df_forecast.rename(columns={"Timestamp": "ds", forecast_metric: "y"}, inplace=True)
+    try:
+        model = Prophet()
+        model.fit(df_forecast)
+
+        future = model.make_future_dataframe(periods=24, freq='h')
+        forecast = model.predict(future)
+
+        fig_forecast = px.line(forecast, x="ds", y="yhat", title=f"{forecast_metric} Forecast (Next 24 hrs)")
+        fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound")
+        fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound")
+
+        fig_forecast.update_layout(
+            xaxis_title="Time",
+            yaxis_title=f"Forecasted {forecast_metric.replace('_', ' ')}",
+            height=500
+        )
+
+        st.plotly_chart(fig_forecast, use_container_width=True)
+    except Exception as e:
+        st.error(f"⚠️ Forecasting failed: {str(e)}")
+  
     # Function to get insights from Groq API for a specific attribute
     def get_groq_insights(attribute_name, data):
         base_url = "http://localhost:8000"
@@ -586,6 +622,7 @@ with tab2:
         st.markdown("#### Operating Cost Insights")
         for insight in cost_insights:
             st.markdown(f"• {insight}")
+
 
 with tab3:
     st.markdown("## 📈 Performance Metrics")
@@ -938,7 +975,6 @@ if st.session_state.get("show_product_data", False):
             st.dataframe(product_data.T, use_container_width=True)
         else:
             st.warning(f"No data available for {selected_product}")
-
 with tab5:
     st.markdown("## 🗺️ Geospatial Spoilage Heatmap")
 
@@ -977,4 +1013,89 @@ with tab5:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+with tab6:
+    st.markdown("## 🧠 Advanced Analytics Suite")
+
+    # Load your sensor data
+    sensor_df = load_sensor_data()
+
+    # --- ABC Analysis ---
+    st.markdown("### 🔤 ABC Analysis on Spoilage Cost")
+    abc_df = pd.DataFrame({
+        "Product": ["A", "B", "C", "D", "E"],
+        "Spoilage_Cost": [10000, 5000, 3000, 500, 200]
+    })
+    abc_df = abc_df.sort_values(by="Spoilage_Cost", ascending=False)
+    abc_df["Cumulative%"] = abc_df["Spoilage_Cost"].cumsum() / abc_df["Spoilage_Cost"].sum() * 100
+
+    def classify(row):
+        if row["Cumulative%"] <= 70:
+            return "A"
+        elif row["Cumulative%"] <= 90:
+            return "B"
+        else:
+            return "C"
+    abc_df["Category"] = abc_df.apply(classify, axis=1)
+    st.dataframe(abc_df)
+
+    # --- Anomaly Detection ---
+    st.markdown("### 🚨 Anomaly Detection on Temperature")
+    df_anomaly = sensor_df[["Timestamp", "Temperature_C"]].copy()
+    df_anomaly["z_score"] = (df_anomaly["Temperature_C"] - df_anomaly["Temperature_C"].mean()) / df_anomaly["Temperature_C"].std()
+    df_anomaly["Anomaly"] = df_anomaly["z_score"].abs() > 2
+    st.dataframe(df_anomaly[df_anomaly["Anomaly"] == True])
+
+    # --- Multimodal Analysis ---
+    st.markdown("### 🤖 Multimodal Spoilage Prediction (Text + Temperature)")
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    multimodal_df = pd.DataFrame({
+        "Remarks": ["delay", "no issue", "leak detected", "normal delivery", "spoilage noticed"],
+        "Temperature": [28, 25, 35, 24, 32],
+        "Label": [1, 0, 1, 0, 1]
+    })
+
+    vect = TfidfVectorizer()
+    X_text = vect.fit_transform(multimodal_df["Remarks"]).toarray()
+    X_all = np.hstack((X_text, multimodal_df[["Temperature"]].values))
+    y = multimodal_df["Label"]
+
+    model = RandomForestClassifier()
+    model.fit(X_all, y)
+
+    # Test prediction UI
+    user_text = st.text_input("Enter sensor remarks:")
+    user_temp = st.slider("Sensor temperature (°C):", 10, 50, 30)
+
+    if user_text:
+        test_vec = vect.transform([user_text]).toarray()
+        test_input = np.hstack((test_vec, [[user_temp]]))
+        pred = model.predict(test_input)[0]
+        st.success(f"Predicted Spoilage Risk: {'Yes' if pred else 'No'}")
+
+    # --- Time Series Forecasting ---
+    st.markdown("### 🔮 Time Series Forecasting (Power Consumption)")
+    from prophet import Prophet
+
+    forecast_df = sensor_df[["Timestamp", "Power_Consumption_kWh"]].rename(
+        columns={"Timestamp": "ds", "Power_Consumption_kWh": "y"}
+    )
+
+    try:
+        m = Prophet()
+        m.fit(forecast_df)
+        future = m.make_future_dataframe(periods=24, freq="h")
+        forecast = m.predict(future)
+
+        fig_forecast = px.line(forecast, x="ds", y="yhat", title="Power Forecast (Next 24 hrs)")
+        fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_lower"], mode="lines", name="Lower Bound")
+        fig_forecast.add_scatter(x=forecast["ds"], y=forecast["yhat_upper"], mode="lines", name="Upper Bound")
+        st.plotly_chart(fig_forecast, use_container_width=True)
+    except Exception as e:
+        st.error(f"⚠️ Forecasting failed: {str(e)}")
+
+
+
             
