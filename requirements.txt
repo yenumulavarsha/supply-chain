@@ -13,6 +13,9 @@ Requests==2.32.3
 seaborn==0.13.2
 streamlit==1.44.1
 uvicorn==0.34.2
+scikit-learn==1.5.0
+scipy==1.13.0
+prophet==1.1.5
 sentence-transformers
 chromadb
 hf_xet
